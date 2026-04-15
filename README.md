@@ -3,7 +3,7 @@ This is a custom status bar using the [swaybar protocol](https://man.archlinux.o
 Because of how the swaybar protocol works, every block update forces all blocks to be updated,
 but using async means that less work is wasted on the bar side of things.
 
-The code in [main.rs](.src//main.rs) should be fairly self explanatory if you want to modify this to your liking.
+The code in [main.rs](src/main.rs) should be fairly self explanatory if you want to modify this to your liking.
 
 # Installation
 
