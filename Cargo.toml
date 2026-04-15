@@ -1,0 +1,17 @@
+[package]
+name = "sway_status_bar"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-io = "2.6.0"
+chrono = { version = "0.4.44", default-features = false, features = ["alloc", "now", "clock"] }
+macro_rules_attribute = { version = "0.2.2", default-features = false }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+smol-macros = "0.1.1"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
