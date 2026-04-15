@@ -1,14 +1,8 @@
-use std::{borrow::Cow, pin::Pin, sync::mpsc::Sender};
+use std::{pin::Pin, sync::mpsc::Sender};
 
 use smol_macros::Executor;
 
 use crate::colour::Rgb;
-
-#[derive(serde::Serialize)]
-pub struct BarOut {
-    header: BarHeader,
-    body: Vec<String>,
-}
 
 #[derive(serde::Serialize, Default)]
 struct BarHeader {
@@ -22,6 +16,9 @@ struct BarHeader {
 pub struct Block {
     /// The text that will be displayed
     full_text: String,
+    name: &'static str,
+
+    // Optional parameters
     /// If given and the text needs to be shortened due to space, this will be displayed instead of `full_text`
     #[serde(skip_serializing_if = "Option::is_none")]
     short_text: Option<String>,
@@ -44,7 +41,6 @@ pub struct Block {
     min_wdith: Option<Width>,
     #[serde(skip_serializing_if = "Option::is_none")]
     align: Option<String>,
-    name: Cow<'static, str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     instance: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -55,36 +51,16 @@ pub struct Block {
     separator_block_width: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     markup: Option<String>,
+
+    // Syncronisation
     #[serde(skip_serializing)]
     id: u8,
     #[serde(skip_serializing)]
     tx: Sender<(u8, String)>,
 }
 
-trait Convert<'a> {
-    fn into_cow(self) -> Cow<'a, str>;
-}
-
-impl<'a> Convert<'a> for String {
-    fn into_cow(self) -> Cow<'a, str> {
-        Cow::Owned(self)
-    }
-}
-
-impl<'a> Convert<'a> for &'a str {
-    fn into_cow(self) -> Cow<'a, str> {
-        Cow::Borrowed(self)
-    }
-}
-
-impl<'a> Convert<'a> for Cow<'a, str> {
-    fn into_cow(self) -> Cow<'a, str> {
-        self
-    }
-}
-
 impl Block {
-    pub fn new(name: impl Convert<'static>, id: u8, tx: Sender<(u8, String)>) -> Block {
+    pub fn new(name: &'static str, id: u8, tx: Sender<(u8, String)>) -> Block {
         Block {
             full_text: String::new(),
             short_text: None,
@@ -97,7 +73,7 @@ impl Block {
             border_right: None,
             min_wdith: None,
             align: None,
-            name: name.into_cow(),
+            name,
             instance: None,
             urgent: None,
             separator: None,
@@ -142,7 +118,7 @@ pub enum Width {
 pub type BlockFn = Box<dyn FnOnce(Block) -> Pin<Box<dyn Future<Output = ()> + Send>>>;
 
 pub struct Bar {
-    names: Vec<Cow<'static, str>>,
+    names: Vec<&'static str>,
     blocks: Vec<BlockFn>,
 }
 
@@ -154,8 +130,8 @@ impl Bar {
         }
     }
 
-    pub fn add_block(mut self, name: impl Convert<'static>, block: BlockFn) -> Self {
-        self.names.push(name.into_cow());
+    pub fn add_block(mut self, name: &'static str, block: BlockFn) -> Self {
+        self.names.push(name);
         self.blocks.push(block);
         self
     }
@@ -169,7 +145,7 @@ impl Bar {
         let mut futures = Vec::with_capacity(n_blocks);
         let mut i = 0u8;
         while let Some(block) = self.blocks.pop() {
-            let name = self.names[(n_blocks - 1) - i as usize].clone();
+            let name = self.names[(n_blocks - 1) - i as usize];
             let bar_item = Block::new(name, i, tx0.clone());
             futures.push(block(bar_item));
             i += 1;
@@ -188,34 +164,32 @@ impl Bar {
 
         let names = self.names.clone();
         ex.spawn(async move {
-            let mut barout = BarOut {
-                header: BarHeader {
-                    version: 1,
-                    ..Default::default()
-                },
-                body: names
-                    .iter()
-                    .map(|n| format!("{{\"full_text\": \"\",\"name\": \"{n}\",}},"))
-                    .collect(),
+            let header = BarHeader {
+                version: 1,
+                ..Default::default()
             };
+            let mut body: Vec<String> = names
+                .iter()
+                .map(|n| format!(r#"{{"full_text": "","name": "{n}",}},"#))
+                .collect();
 
-            // let mut temp_buffer = Vec::with_capacity(n_blocks);
-            // while temp_buffer.len() < n_blocks {
-            //     let (i, out) = rx.recv().expect("channel hung up");
-            //     if !temp_buffer.iter().any(|(temp_i, _)| *temp_i == i) {
-            //         temp_buffer.push((i, out));
-            //     }
-            // }
-
-            // temp_buffer.sort_by_key(|(i, _)| *i);
-            // barout.body = temp_buffer.iter().map(|(_, out)| out.clone()).collect();
-
-            println!("{}\n", serde_json::to_string(&barout.header).unwrap());
+            println!("{}\n", serde_json::to_string(&header).unwrap());
             println!("[");
             for (i, out) in &rx {
-                barout.body[i as usize] = out;
+                body[i as usize] = out;
 
-                println!("{},", serde_json::to_string(&barout.body).unwrap());
+                print!("[");
+                let mut j = 0;
+                loop {
+                    print!("{}", body[j]);
+                    j += 1;
+                    if j < body.len() {
+                        print!(",");
+                    } else {
+                        break;
+                    }
+                }
+                println!("],");
             }
         })
         .await;
