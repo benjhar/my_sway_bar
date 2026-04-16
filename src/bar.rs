@@ -1,4 +1,4 @@
-use std::{pin::Pin, sync::mpsc::Sender};
+use std::{borrow::Cow, pin::Pin, sync::mpsc::Sender};
 
 use smol_macros::Executor;
 
@@ -56,7 +56,7 @@ pub struct Block {
     /// calculated based on the length of the string. If a [`Width::Int`] is used, the mimunum width
     /// is that number of pixels.
     #[serde(skip_serializing_if = "Option::is_none")]
-    min_wdith: Option<Width>,
+    min_width: Option<Width>,
 
     /// If the text does not span the full width of the block, this specifies how the text should be aligned inside of the block. This can be left (default), right, or center.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -115,7 +115,7 @@ impl Block {
             border_bottom: None,
             border_left: None,
             border_right: None,
-            min_wdith: None,
+            min_width: None,
             align: None,
             name,
             instance: None,
@@ -152,6 +152,14 @@ impl Block {
         self.use_pango = use_pango;
     }
 
+    pub fn set_width(&mut self, min_width: Option<Width>) {
+        self.min_width = min_width;
+    }
+
+    pub fn set_align(&mut self, align: Option<Align>) {
+        self.align = align;
+    }
+
     /// Update this [`Block`] on the bar.
     ///
     /// # Panics
@@ -168,13 +176,16 @@ impl Block {
 #[serde(untagged)]
 pub enum Width {
     Int(u8),
-    String(String),
+    String(Cow<'static, str>),
 }
 
 #[derive(serde::Serialize, Clone)]
 pub enum Align {
+    #[serde(rename = "left")]
     Left,
+    #[serde(rename = "center")]
     Centre,
+    #[serde(rename = "right")]
     Right,
 }
 

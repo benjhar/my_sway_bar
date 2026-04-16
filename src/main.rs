@@ -1,5 +1,6 @@
 #![feature(ascii_char)]
 use std::{
+    borrow::Cow,
     io::Read,
     pin::Pin,
     time::{Duration, Instant},
@@ -14,7 +15,7 @@ mod bar;
 mod colour;
 
 use crate::{
-    bar::{Bar, Block},
+    bar::{Align, Bar, Block, Width},
     colour::Rgb,
 };
 
@@ -54,6 +55,8 @@ fn battery(mut block: Block) -> Pin<Box<dyn Future<Output = ()> + Send>> {
     let status_path = "/sys/class/power_supply/BAT1/status";
     let mut status_buf = [b'U'];
     block.use_pango(true);
+    block.set_width(Some(Width::String(Cow::Borrowed("    "))));
+    block.set_align(Some(Align::Centre));
 
     Box::pin(async move {
         let mut text;
@@ -93,7 +96,7 @@ fn battery(mut block: Block) -> Pin<Box<dyn Future<Output = ()> + Send>> {
                 _ => {}
             }
 
-            block.set_full_text(unsafe { text.as_ascii_unchecked() }.as_str());
+            block.set_full_text(unsafe { text.as_ascii_unchecked() }[..n].as_str());
             block.flush();
             Timer::after(Duration::from_secs(5)).await;
         }
