@@ -59,9 +59,8 @@ pub struct Block {
     min_wdith: Option<Width>,
 
     /// If the text does not span the full width of the block, this specifies how the text should be aligned inside of the block. This can be left (default), right, or center.
-    // TODO: Change to enum
     #[serde(skip_serializing_if = "Option::is_none")]
-    align: Option<String>,
+    align: Option<Align>,
 
     /// The instance of the name for the block. This is only used to identify the block for click events. If set, each block should have a unique name and instance pair.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -79,16 +78,29 @@ pub struct Block {
     #[serde(skip_serializing_if = "Option::is_none")]
     separator_block_width: Option<u8>,
 
-    /// The type of markup to use when parsing the text for the block. This can either be pango or none (default).
-    // TODO: Change to use_pango `bool` and serialize as markup `Option`
-    #[serde(skip_serializing_if = "Option::is_none")]
-    markup: Option<String>,
+    /// Whether to use pango to render the block text.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[serde(serialize_with = "use_pango_serialize")]
+    #[serde(rename = "markup")]
+    use_pango: bool,
 
     // Syncronisation
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     id: u8,
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     tx: Sender<(u8, String)>,
+}
+
+#[expect(clippy::trivially_copy_pass_by_ref, reason = "Forced by serde")]
+fn use_pango_serialize<S>(use_pango: &bool, s: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    if *use_pango {
+        s.serialize_str("pango")
+    } else {
+        s.serialize_none()
+    }
 }
 
 impl Block {
@@ -110,7 +122,7 @@ impl Block {
             urgent: None,
             separator: None,
             separator_block_width: None,
-            markup: None,
+            use_pango: false,
             id,
             tx,
         }
@@ -136,6 +148,10 @@ impl Block {
         self.color = colour;
     }
 
+    pub fn use_pango(&mut self, use_pango: bool) {
+        self.use_pango = use_pango;
+    }
+
     /// Update this [`Block`] on the bar.
     ///
     /// # Panics
@@ -153,6 +169,13 @@ impl Block {
 pub enum Width {
     Int(u8),
     String(String),
+}
+
+#[derive(serde::Serialize, Clone)]
+pub enum Align {
+    Left,
+    Centre,
+    Right,
 }
 
 pub type BlockFn = Box<dyn FnOnce(Block) -> Pin<Box<dyn Future<Output = ()> + Send>>>;
@@ -190,7 +213,6 @@ impl Bar {
             futures.push(block(bar_item));
             i += 1;
         }
-        drop(self.blocks);
 
         let mut tasks = Vec::with_capacity(n_blocks);
         ex.spawn_many(futures, &mut tasks);
@@ -201,6 +223,7 @@ impl Bar {
         // Drop tx0 so that rx.recv panics if all block tasks exit - otherwise tx0 would still be in
         // scope and it would still be able to block.
         drop(tx0);
+        drop(self.blocks);
 
         let names = self.names.clone();
         ex.spawn(async move {
@@ -210,7 +233,8 @@ impl Bar {
             };
             let mut body: Vec<String> = names
                 .iter()
-                .map(|n| format!(r#"{{"full_text": "","name": "{n}",}},"#))
+                .rev()
+                .map(|n| format!(r#"{{"full_text": "","name": "{n}"}},"#))
                 .collect();
 
             println!("{}\n", serde_json::to_string(&header).unwrap());

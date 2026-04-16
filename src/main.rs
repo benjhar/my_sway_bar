@@ -53,6 +53,7 @@ fn battery(mut block: Block) -> Pin<Box<dyn Future<Output = ()> + Send>> {
     let capacity_path = "/sys/class/power_supply/BAT1/capacity";
     let status_path = "/sys/class/power_supply/BAT1/status";
     let mut status_buf = [b'U'];
+    block.use_pango(true);
 
     Box::pin(async move {
         let mut text;
