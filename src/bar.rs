@@ -160,6 +160,10 @@ impl Block {
         self.align = align;
     }
 
+    pub fn set_urgent(&mut self, urgent: Option<bool>) {
+        self.urgent = urgent;
+    }
+
     /// Update this [`Block`] on the bar.
     ///
     /// # Panics

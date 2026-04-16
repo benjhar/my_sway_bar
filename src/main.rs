@@ -1,4 +1,5 @@
 #![feature(ascii_char)]
+#![feature(int_from_ascii)]
 use std::{
     borrow::Cow,
     io::Read,
@@ -24,6 +25,8 @@ const WARN: Rgb = Rgb::new([249, 226, 175]);
 const ERR: Rgb = Rgb::new([243, 139, 168]);
 const TEXT: Rgb = Rgb::new([30, 30, 46]);
 const TEAL: Rgb = Rgb::new([148, 226, 213]);
+
+const BATTERY_CAPACITY_WARN: u8 = 15;
 
 fn time(mut block: Block) -> Pin<Box<dyn Future<Output = ()> + Send>> {
     Box::pin(async move {
@@ -76,14 +79,17 @@ fn battery(mut block: Block) -> Pin<Box<dyn Future<Output = ()> + Send>> {
             let status_index = n - 1;
 
             match status_buf[0] {
-                b'U' => text[status_index] = b'?',
+                b'U' => {
+                    text[status_index] = b'?';
+                    block.set_background(Some(ERR));
+                }
                 b'C' => {
                     text[status_index] = b'%';
-                    block.set_background(Some(WARN));
+                    block.set_background(Some(TEAL));
                 }
                 b'D' => {
                     text[status_index] = b'%';
-                    block.set_background(Some(TEAL));
+                    block.set_background(Some(WARN));
                 }
                 b'N' => {
                     text[status_index] = b'%';
@@ -94,6 +100,12 @@ fn battery(mut block: Block) -> Pin<Box<dyn Future<Output = ()> + Send>> {
                     block.set_background(Some(SUCCESS));
                 }
                 _ => {}
+            }
+
+            if u8::from_ascii(&text[..n - 1]).expect("invalid capacity") < BATTERY_CAPACITY_WARN {
+                block.set_urgent(Some(true));
+            } else {
+                block.set_urgent(None);
             }
 
             block.set_full_text(unsafe { text.as_ascii_unchecked() }[..n].as_str());
